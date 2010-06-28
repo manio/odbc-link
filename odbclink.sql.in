@@ -1,0 +1,48 @@
+CREATE SCHEMA odbclink;
+
+CREATE TYPE odbclink.conns AS (
+	id int4,
+	connected bool,
+	dsn text,
+	uid text,
+	pwd text,
+	connstr text);
+
+CREATE OR REPLACE FUNCTION odbclink.connect(dsn text, uid text, pwd text)
+RETURNS int4 AS 'MODULE_PATHNAME','odbclink_connect'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.connect(connstr text)
+RETURNS int4 AS 'MODULE_PATHNAME','odbclink_driverconnect'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.connections()
+RETURNS setof odbclink.conns AS 'MODULE_PATHNAME','odbclink_connections'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.disconnect(conn int4)
+RETURNS void AS 'MODULE_PATHNAME','odbclink_disconnect'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.query(conn int4, query text)
+RETURNS setof record AS 'MODULE_PATHNAME','odbclink_query_n'
+LANGUAGE C STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.query(dsn text, uid text, pwd text, query text)
+RETURNS setof record AS 'MODULE_PATHNAME','odbclink_query_dsn'
+LANGUAGE C STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.query(connstr text, query text)
+RETURNS setof record AS 'MODULE_PATHNAME','odbclink_query_connstr'
+LANGUAGE C STABLE STRICT;
+
+GRANT USAGE ON SCHEMA odbclink TO PUBLIC;
+
+GRANT EXECUTE ON FUNCTION
+	odbclink.connect(dsn text, uid text, pwd text),
+	odbclink.connect(connstr text),
+	odbclink.disconnect(conn int4),
+	odbclink.query(conn int4, query text),
+	odbclink.query(dsn text, uid text, pwd text, query text),
+	odbclink.query(connstr text, query text)
+TO PUBLIC;
