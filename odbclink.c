@@ -528,7 +528,7 @@ compatTupleDescs(odbcstmt *stmt)
 }
 
 static SQLRETURN
-get_char_data(odbcstmt *stmt, int col, char **value, bool *isnull)
+get_char_data(odbcstmt *stmt, int col, char **value, int *length, bool *isnull)
 {
 	SQLRETURN	ret;
 	char	   *char_val;
@@ -565,6 +565,8 @@ get_char_data(odbcstmt *stmt, int col, char **value, bool *isnull)
 
 	if (value)
 		*value = char_val;
+	if (*length)
+		*length = char_pos;
 	if (isnull)
 		*isnull = (size_ind == SQL_NULL_DATA);
 	return ret;
@@ -582,11 +584,12 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 
 	/* These are the values SQLGetData() puts data into */
 	int16	smallint_val = 0;
-	long	long_val = 0;
+	int32	int_val = 0;
 	int64	bigint_val = 0;
 	float	float_val = 0;
 	double	double_val = 0;
 	char	*char_val = NULL;
+	int	char_pos = 0;
 	SQLLEN	size_ind;
 
 	ret = SQLDescribeCol(stmt->hStmt, col,
@@ -627,7 +630,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 		case SQL_INTEGER:
 		case SQL_BIT:
 			ret = SQLGetData(stmt->hStmt, col, SQL_C_SLONG,
-					(SQLPOINTER)&long_val, sizeof(long_val), &size_ind);
+					(SQLPOINTER)&int_val, sizeof(int_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
 				get_sql_error(0, SQL_HANDLE_STMT, stmt);
@@ -638,13 +641,13 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 				switch (typeoid)
 				{
 					case INT4OID:
-						*value = Int32GetDatum(long_val);
+						*value = Int32GetDatum(int_val);
 						break;
 					case INT8OID:
-						*value = Int64GetDatum(long_val);
+						*value = Int64GetDatum(int_val);
 						break;
 					case BOOLOID:
-						*value = BoolGetDatum(long_val);
+						*value = BoolGetDatum(int_val != 0);
 				}
 			break;
 
@@ -671,29 +674,31 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 			 */
 			if (typeoid == INT2OID || typeoid == INT4OID || typeoid == INT8OID)
 			{
-				ret = get_char_data(stmt, col, &char_val, isnull);
+				ret = get_char_data(stmt, col, &char_val, &char_pos, isnull);
 				if (!*isnull)
 				{
 					char *endptr;
 
-					long_val = strtoll(char_val, &endptr, 10);
+					bigint_val = strtoll(char_val, &endptr, 10);
 
 					switch (typeoid)
 					{
 						case INT8OID:
 							if (endptr && *endptr != '\0' && *endptr != '.')
 								elog(ERROR, "too large decimal value for 64-bit integer");
-							*value = Int64GetDatum(long_val);
+							*value = Int64GetDatum(bigint_val);
 							break;
 						case INT4OID:
-							if (long_val > INT_MAX)
+							if (bigint_val > INT_MAX)
 								elog(ERROR, "too large decimal value for 32-bit integer");
-							*value = Int32GetDatum(long_val);
+							int_val = bigint_val;
+							*value = Int32GetDatum(int_val);
 							break;
 						case INT2OID:
-							if (long_val > SHRT_MAX)
+							if (bigint_val > SHRT_MAX)
 								elog(ERROR, "too large decimal value for 16-bit integer");
-							*value = Int16GetDatum(long_val);
+							smallint_val = bigint_val;
+							*value = Int16GetDatum(smallint_val);
 							break;
 					}
 				}
@@ -709,7 +714,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 		case SQL_BINARY:
 		case SQL_VARBINARY:
 		case SQL_LONGVARBINARY:
-			ret = get_char_data(stmt, col, &char_val, isnull);
+			ret = get_char_data(stmt, col, &char_val, &char_pos, isnull);
 			if (!*isnull)
 				switch (typeoid)
 				{

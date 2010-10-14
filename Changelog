@@ -1,0 +1,27 @@
+ODBC-Link 1.0.4
+
+Added Changelog.
+Fixed a nasty INT vs BIGINT problem on 64-bit big endian platforms.
+
+ODBC-Link 1.0.3
+
+Allow passing NUMERIC/DECIMAL values from ODBC into INT4/INT8/NUMERIC
+and string-like types in PostgreSQL.
+Extracting string-like values from ODBC has its own function now.
+Don't depend on the value returned by SQLRowCount(), it's invalid
+on at least Oracle resulting in empty resultset at the PostgreSQL side.
+
+ODBC-Link 1.0.2
+
+Limit LOGBINARY -> bytea conversion to PostgreSQL 8.5+ (actually, 9.0.0+)
+Report more verbose error messages from ODBC.
+One more size indicator problem fixed under 64-bit ODBC.
+
+ODBC-Link 1.0.1
+
+Fixed a problem with size indicators under 64-bit ODBC.
+Fixed a compilation problem because of a typo (pree vs pfree).
+
+ODBC-Link 1.0
+
+Initial release.
