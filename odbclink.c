@@ -25,6 +25,9 @@ PG_FUNCTION_INFO_V1(odbclink_disconnect);
 PG_FUNCTION_INFO_V1(odbclink_query_n);
 PG_FUNCTION_INFO_V1(odbclink_query_dsn);
 PG_FUNCTION_INFO_V1(odbclink_query_connstr);
+PG_FUNCTION_INFO_V1(odbclink_exec_n);
+PG_FUNCTION_INFO_V1(odbclink_exec_dsn);
+PG_FUNCTION_INFO_V1(odbclink_exec_connstr);
 
 static odbcconn	*conns;
 static int	n_conn;
@@ -597,7 +600,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 				&type, &columnsz, &decimals, &nullable);
 	if (!SQL_SUCCEEDED(ret))
 	{
-		get_sql_error(0, SQL_HANDLE_STMT, stmt);
+		get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 		elog(ERROR, "odbclink: unsuccessful SQLDescribeCol call: %s", totalerrmsg);
 	}
 
@@ -608,7 +611,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 					(SQLPOINTER)&smallint_val, sizeof(smallint_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
-				get_sql_error(0, SQL_HANDLE_STMT, stmt);
+				get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 				elog(ERROR, "odbclink: unsuccessful SQLGetData call: %s", totalerrmsg);
 			}
 			*isnull = (size_ind == SQL_NULL_DATA);
@@ -633,7 +636,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 					(SQLPOINTER)&int_val, sizeof(int_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
-				get_sql_error(0, SQL_HANDLE_STMT, stmt);
+				get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 				elog(ERROR, "odbclink: unsuccessful SQLGetData call: %s", totalerrmsg);
 			}
 			*isnull = (size_ind == SQL_NULL_DATA);
@@ -656,7 +659,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 					(SQLPOINTER)&bigint_val, sizeof(bigint_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
-				get_sql_error(0, SQL_HANDLE_STMT, stmt);
+				get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 				elog(ERROR, "odbclink: unsuccessful SQLGetData call: %s", totalerrmsg);
 			}
 			*isnull = (size_ind == SQL_NULL_DATA);
@@ -770,7 +773,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 					(SQLPOINTER)&float_val, sizeof(float_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
-				get_sql_error(0, SQL_HANDLE_STMT, stmt);
+				get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 				elog(ERROR, "odbclink: unsuccessful SQLGetData call: %s", totalerrmsg);
 			}
 			*isnull = (size_ind == SQL_NULL_DATA);
@@ -783,7 +786,7 @@ get_data(odbcstmt *stmt, int col, Datum *value, bool *isnull)
 					(SQLPOINTER)&double_val, sizeof(double_val), &size_ind);
 			if (!SQL_SUCCEEDED(ret))
 			{
-				get_sql_error(0, SQL_HANDLE_STMT, stmt);
+				get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 				elog(ERROR, "odbclink: unsuccessful SQLGetData call: %s", totalerrmsg);
 			}
 			*isnull = (size_ind == SQL_NULL_DATA);
@@ -806,6 +809,7 @@ init_query_common(PG_FUNCTION_ARGS, int i, char *query)
 	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 	stmt = palloc(sizeof(odbcstmt));
+	stmt->conn_idx = i;
 
 	/*
 	 * The allocated statement handle is the only thing
@@ -823,7 +827,7 @@ init_query_common(PG_FUNCTION_ARGS, int i, char *query)
 	ret = SQLExecDirect(stmt->hStmt, (SQLCHAR *)query, SQL_NTS);
 	if (!SQL_SUCCEEDED(ret))
 	{
-		get_sql_error(0, SQL_HANDLE_STMT, stmt);
+		get_sql_error(i, SQL_HANDLE_STMT, stmt);
 		SQLFreeHandle(SQL_HANDLE_STMT, stmt->hStmt);
 		elog(ERROR, "odbclink: unsuccessful SQLExecDirect call: %s", totalerrmsg);
 	}
@@ -871,13 +875,11 @@ static Datum
 query_common(PG_FUNCTION_ARGS)
 {
 	FuncCallContext	   *funcctx;
-	int		call_cntr;
 	SQLRETURN	ret;
 	odbcstmt	   *stmt;
 
 	funcctx = SRF_PERCALL_SETUP();
 
-	call_cntr = funcctx->call_cntr;
 	stmt = funcctx->user_fctx;
 
 	ret = SQLFetch(stmt->hStmt);
@@ -891,7 +893,7 @@ query_common(PG_FUNCTION_ARGS)
 
 		if (!SQL_SUCCEEDED(ret))
 		{
-			get_sql_error(0, SQL_HANDLE_STMT, stmt);
+			get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 			SQLFreeHandle(SQL_HANDLE_STMT, stmt->hStmt);
 			elog(ERROR, "odbclink: unsuccessful SQLFetch call: %s", totalerrmsg);
 		}
@@ -923,7 +925,7 @@ query_common(PG_FUNCTION_ARGS)
 	{
 		if (ret != SQL_NO_DATA)
 		{
-			get_sql_error(0, SQL_HANDLE_STMT, stmt);
+			get_sql_error(stmt->conn_idx, SQL_HANDLE_STMT, stmt);
 			SQLFreeHandle(SQL_HANDLE_STMT, stmt->hStmt);
 			elog(ERROR, "odbclink: unsuccessful SQLFetch call: %s", totalerrmsg);
 		}
@@ -1000,4 +1002,99 @@ odbclink_query_connstr(PG_FUNCTION_ARGS)
 	}
 
 	return query_common(fcinfo);
+}
+
+static void
+exec_common(PG_FUNCTION_ARGS, int i, char *query)
+{
+	SQLRETURN	ret;
+	odbcstmt	stmt;
+
+	/* Store the connection index. */
+	stmt.conn_idx = i;
+
+	/*
+	 * The allocated statement handle is the only thing
+	 * that must be freed manually. All the other allocations
+	 * are dealt by PostgreSQL's garbage collection.
+	 */
+	ret = SQLAllocStmt(conns[i].hCon, &stmt.hStmt);
+	if (!SQL_SUCCEEDED(ret))
+	{
+		get_sql_error(i, SQL_HANDLE_DBC, NULL);
+		elog(ERROR, "odbclink: unsuccessful SQLAllocStmt call: %s", totalerrmsg);
+	}
+
+	ret = SQLExecDirect(stmt.hStmt, (SQLCHAR *)query, SQL_NTS);
+	if (!SQL_SUCCEEDED(ret))
+	{
+		get_sql_error(i, SQL_HANDLE_STMT, &stmt);
+		SQLFreeHandle(SQL_HANDLE_STMT, stmt.hStmt);
+		elog(ERROR, "odbclink: unsuccessful SQLExecDirect call: %s", totalerrmsg);
+	}
+
+	SQLFreeHandle(SQL_HANDLE_STMT, stmt.hStmt);
+}
+
+Datum
+odbclink_exec_n(PG_FUNCTION_ARGS)
+{
+	int		i;
+	char	   *query;
+
+	i = PG_GETARG_INT32(0) - 1;
+	if (!(i >= 0 && i < n_conn && conns[i].connected))
+		elog(ERROR, "odbclink: no such connection");
+
+	query = TextDatumGetCString(PG_GETARG_DATUM(1));
+
+	exec_common(fcinfo, i, query);
+
+	pfree(query);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+odbclink_exec_dsn(PG_FUNCTION_ARGS)
+{
+	int		i;
+	char	   *dsn, *uid, *pwd;
+	char	   *query;
+
+	dsn = TextDatumGetCString(PG_GETARG_DATUM(0));
+	uid = TextDatumGetCString(PG_GETARG_DATUM(1));
+	pwd = TextDatumGetCString(PG_GETARG_DATUM(2));
+	query = TextDatumGetCString(PG_GETARG_DATUM(3));
+
+	i = find_conn_dsn(dsn, uid, pwd);
+	if (i < 0)
+		i = connect_dsn(dsn, uid, pwd);
+
+	exec_common(fcinfo, i, query);
+
+	pfree(dsn); pfree(uid); pfree(pwd); pfree(query);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+odbclink_exec_connstr(PG_FUNCTION_ARGS)
+{
+	int		i;
+	char	   *connstr;
+	char	   *query;
+
+	connstr = TextDatumGetCString(PG_GETARG_DATUM(0));
+	query = TextDatumGetCString(PG_GETARG_DATUM(1));
+
+	i = find_conn_connstr(connstr);
+	if (i < 0)
+		i = connect_connstr(connstr);
+
+	exec_common(fcinfo, i, query);
+
+	pfree(connstr); pfree(query);
+
+	PG_RETURN_VOID();
 }

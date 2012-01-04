@@ -77,7 +77,7 @@ disconnecting from the PostgreSQL server.
 Queries that require no parameters can be performed using either
 the connection number:
 
-dbname=# select odbclink.query(1, 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
+dbname=# select * from odbclink.query(1, 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
  id |      t       |  d  
 ----+--------------+-----
   1 | first text   | 1.0
@@ -87,7 +87,7 @@ dbname=# select odbclink.query(1, 'SELECT * FROM mytable') as result(id int4, t 
 
 or the DSN/UID/PWD triplet:
 
-dbname=# select odbclink.query('dsn', 'username', 'password', 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
+dbname=# select * from odbclink.query('dsn', 'username', 'password', 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
  id |      t       |  d  
 ----+--------------+-----
   1 | first text   | 1.0
@@ -97,7 +97,7 @@ dbname=# select odbclink.query('dsn', 'username', 'password', 'SELECT * FROM myt
 
 or the connection string:
 
-dbname=# select odbclink.query('DSN=dsn;UID=username;PWD=password;', 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
+dbname=# select * from odbclink.query('DSN=dsn;UID=username;PWD=password;', 'SELECT * FROM mytable') as result(id int4, t text, d decimal);
  id |      t       |  d  
 ----+--------------+-----
   1 | first text   | 1.0
@@ -117,6 +117,35 @@ All three forms of the function odbclink.query() returns "SETOF RECORD", so
 Types defined by ODBC are supported. The SQL_*BINARY types are only
 supported from PostgreSQL 8.5/9.0+.
 
-(C) 2010. Cybertec GmbH
+Executing DML statements are also supported using odbclink.execute() calls.
+Like odbclink.query(), 3 variants of this function exist. These function
+returns VOID. For example, let's create a new table in the remote database,
+query this table, add two records to it then query it again:
+
+dbname=# select odbclink.execute(1, 'create table test_table(i serial, t text)');
+ execute 
+---------
+ 
+(1 row)
+
+dbname=# select * from odbclink.query(1, 'select * from test_table') as x(i int4, t text);
+ i | t 
+---+---
+(0 rows)
+
+dbname=# select odbclink.execute(1, 'insert into test_table(t) values (''a''), (''b'')');
+ execute 
+---------
+ 
+(1 row)
+
+dbname=# select * from odbclink.query(1, 'select * from test_table') as x(i int4, t text);
+ i | t 
+---+---
+ 1 | a
+ 2 | b
+(2 rows)
+
+(C) 2010-2012. Cybertec GmbH
 Zoltán Böszörményi <zb@cybertec.at>
 Hans-Jürgen Schönig <hs@cybertec.at>

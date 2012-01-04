@@ -36,6 +36,18 @@ CREATE OR REPLACE FUNCTION odbclink.query(connstr text, query text)
 RETURNS setof record AS 'MODULE_PATHNAME','odbclink_query_connstr'
 LANGUAGE C STABLE STRICT;
 
+CREATE OR REPLACE FUNCTION odbclink.execute(conn int4, query text)
+RETURNS void AS 'MODULE_PATHNAME','odbclink_exec_n'
+LANGUAGE C STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.execute(dsn text, uid text, pwd text, query text)
+RETURNS void AS 'MODULE_PATHNAME','odbclink_exec_dsn'
+LANGUAGE C STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION odbclink.execute(connstr text, query text)
+RETURNS void AS 'MODULE_PATHNAME','odbclink_exec_connstr'
+LANGUAGE C STABLE STRICT;
+
 GRANT USAGE ON SCHEMA odbclink TO PUBLIC;
 
 GRANT EXECUTE ON FUNCTION
@@ -44,5 +56,8 @@ GRANT EXECUTE ON FUNCTION
 	odbclink.disconnect(conn int4),
 	odbclink.query(conn int4, query text),
 	odbclink.query(dsn text, uid text, pwd text, query text),
-	odbclink.query(connstr text, query text)
+	odbclink.query(connstr text, query text),
+	odbclink.execute(conn int4, query text),
+	odbclink.execute(dsn text, uid text, pwd text, query text),
+	odbclink.execute(connstr text, query text)
 TO PUBLIC;

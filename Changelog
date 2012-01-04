@@ -1,3 +1,20 @@
+ODBC-Link 1.0.5
+
+Fixed a warning on Fedora 16:
+
+odbclink.c: In function ‘query_common’:
+odbclink.c:874:7: warning: variable ‘call_cntr’ set but not used [-Wunused-but-set-variable]
+
+Implemented odbclink.execute() for executing DML statements in
+three variants, all returns void:
+
+- odbclink.execute(conn int4, query text)
+- odbclink.execute(dsn text, uid text, pwd text, query text)
+- odbclink.execute(connstr text, query text)
+
+Fixed reporting errors coming from remote servers in case of multiple
+ODBC connections.
+
 ODBC-Link 1.0.4
 
 Added Changelog.
