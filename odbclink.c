@@ -3,6 +3,10 @@
 #include "fmgr.h"
 #include "funcapi.h"
 #include "access/htup.h"
+#if PG_VERSION_NUM >= 90300
+#include "access/htup_details.h"
+#include "utils/timestamp.h"
+#endif
 #include "catalog/pg_type.h"
 #include "executor/spi.h"
 #include "lib/stringinfo.h"
